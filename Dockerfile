@@ -14,4 +14,7 @@ EXPOSE 8000
 EXPOSE 8265
 
 # Command to run the FastAPI app
-CMD ["uv", "run", "python", "main.py"]
+export RAY_SERVE_HTTP_HOST=0.0.0.0
+export RAY_SERVE_HTTP_PORT=8000
+CMD ["uv", "run", "serve", "run", "main:transcriber_app"]
+
