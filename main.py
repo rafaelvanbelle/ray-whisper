@@ -2,7 +2,9 @@ import ray
 from ray import serve
 import whisperx
 
-ray.init()
+ray.shutdown()  # Clean any prior state
+ray.init(dashboard_host="0.0.0.0")
+
 serve.start(detached=True, http_options={"host": "0.0.0.0"})
 
 
