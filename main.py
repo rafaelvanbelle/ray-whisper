@@ -1,228 +1,186 @@
-# main.py
-import ray
-from ray import serve
-from fastapi import FastAPI, UploadFile, File, HTTPException
-from fastapi.responses import JSONResponse
-import asyncio
 import os
 import tempfile
-import uvicorn
 from typing import Dict, Any
+import ray
+from ray import serve
+import whisperx
+import torch
 import logging
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Initialize Ray
-ray.init(dashboard_host="0.0.0.0")
-
-# Ray Serve deployment
-@serve.deployment(ray_actor_options={"num_gpus": 0.5}, num_replicas=1)
-class WhisperXModel:
+@serve.deployment(
+    ray_actor_options={"num_gpus": 1 if torch.cuda.is_available() else 0},
+    max_concurrent_queries=1  # Limit concurrent requests to avoid OOM
+)
+class WhisperXService:
     def __init__(self):
-        import whisperx
-        self.device = "cuda"
-        logger.info("Loading WhisperX model...")
-        self.model = whisperx.load_model("small", device=self.device, compute_type="float16")
+        self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        self.batch_size = 16
+        self.compute_type = "float16" if torch.cuda.is_available() else "int8"
+        
+        logger.info(f"Initializing WhisperX on device: {self.device}")
+        
+        # Load the model
+        self.model = whisperx.load_model(
+            "tiny", 
+            self.device, 
+            compute_type=self.compute_type
+        )
+        
+        # Load alignment model (for better timestamps)
         self.align_model = None
+        self.align_metadata = None
+        
         logger.info("WhisperX model loaded successfully")
 
-    def transcribe_and_align(self, audio_path: str) -> Dict[str, Any]:
-        try:
-            logger.info(f"Transcribing audio file: {audio_path}")
-            
-            # Transcribe
-            result = self.model.transcribe(audio_path)
-            
-            if not result.get("segments"):
-                return {"error": "No speech detected in audio"}
-            
-            # Load alignment model if not already loaded
-            if self.align_model is None:
-                import whisperx
-                language_code = result.get("language", "en")
-                logger.info(f"Loading alignment model for language: {language_code}")
-                self.align_model = whisperx.load_align_model(
+    def load_alignment_model(self, language_code: str):
+        """Load alignment model for specific language if not already loaded"""
+        if self.align_model is None or getattr(self, 'current_lang', None) != language_code:
+            try:
+                self.align_model, self.align_metadata = whisperx.load_align_model(
                     language_code=language_code, 
                     device=self.device
                 )
+                self.current_lang = language_code
+                logger.info(f"Alignment model loaded for language: {language_code}")
+            except Exception as e:
+                logger.warning(f"Could not load alignment model for {language_code}: {e}")
+                self.align_model = None
+
+    async def __call__(self, request) -> Dict[str, Any]:
+        try:
+            # Get audio file from request
+            audio_data = request.get("audio_data")
+            file_extension = request.get("file_extension", ".wav")
+            language = request.get("language", None)  # Optional language hint
             
-            # Align the transcription
-            result_aligned = whisperx.align(
-                result["segments"], 
-                self.model, 
-                self.align_model, 
-                audio_path,
-                self.device
+            if not audio_data:
+                return {"error": "No audio data provided"}
+            
+            # Handle audio data (bytes from uploaded file)
+            audio_bytes = audio_data
+            
+            # Save to temporary file with proper extension
+            with tempfile.NamedTemporaryFile(delete=False, suffix=file_extension) as tmp_file:
+                tmp_file.write(audio_bytes)
+                temp_audio_path = tmp_file.name
+            
+            # Load audio
+            logger.info(f"Loading audio from: {temp_audio_path}")
+            audio = whisperx.load_audio(temp_audio_path)
+            
+            # Transcribe
+            logger.info("Starting transcription...")
+            result = self.model.transcribe(
+                audio, 
+                batch_size=self.batch_size,
+                language=language
             )
             
-            # Extract text and word timestamps from all segments
-            full_text = " ".join([segment["text"] for segment in result_aligned["segments"]])
-            all_words = []
-            for segment in result_aligned["segments"]:
-                if "words" in segment:
-                    all_words.extend(segment["words"])
+            # Detect language if not provided
+            detected_language = result.get("language", "en")
+            
+            # Align if possible
+            if result["segments"]:
+                self.load_alignment_model(detected_language)
+                if self.align_model:
+                    logger.info("Performing alignment...")
+                    result = whisperx.align(
+                        result["segments"], 
+                        self.align_model, 
+                        self.align_metadata, 
+                        audio, 
+                        self.device, 
+                        return_char_alignments=False
+                    )
+            
+            # Clean up temporary file
+            if os.path.exists(temp_audio_path):
+                os.unlink(temp_audio_path)
             
             return {
-                "text": full_text,
-                "language": result.get("language"),
-                "segments": result_aligned["segments"],
-                "word_timestamps": all_words
+                "transcription": result,
+                "language": detected_language,
+                "status": "success"
             }
             
         except Exception as e:
             logger.error(f"Error during transcription: {str(e)}")
-            return {"error": f"Transcription failed: {str(e)}"}
+            return {
+                "error": str(e),
+                "status": "failed"
+            }
 
-    def __call__(self, audio_path: str) -> Dict[str, Any]:
-        return self.transcribe_and_align(audio_path)
+# FastAPI app for health checks and simple interface
+from fastapi import FastAPI, UploadFile, File, Form
+from fastapi.responses import JSONResponse
+import uvicorn
 
-# Create and deploy the Ray Serve application
-whisperx_handle = WhisperXModel.bind()
-
-# Start Ray Serve
-serve.start(http_options={"host": "0.0.0.0", "port": 8001})  # Ray Serve on port 8001
-serve.run(whisperx_handle, name="whisperx-service", route_prefix="/")
-
-# Create FastAPI app
-app = FastAPI(
-    title="WhisperX Transcription Service",
-    description="Audio transcription service using WhisperX with word-level timestamps",
-    version="1.0.0"
-)
-
-@app.get("/")
-async def root():
-    return {"message": "WhisperX Transcription Service is running"}
+app = FastAPI(title="WhisperX Ray Serve API")
 
 @app.get("/health")
 async def health_check():
-    return {"status": "healthy", "service": "whisperx-transcription"}
+    return {"status": "healthy"}
 
 @app.post("/transcribe")
-async def transcribe_audio(audio_file: UploadFile = File(...)):
-    """
-    Transcribe an audio file and return text with word-level timestamps
-    
-    Args:
-        audio_file: Audio file (WAV, MP3, M4A, etc.)
-        
-    Returns:
-        JSON with transcribed text, language, and word timestamps
-    """
-    if not audio_file:
-        raise HTTPException(status_code=400, detail="No audio file provided")
-    
-    # Check file size (limit to 100MB)
-    if audio_file.size and audio_file.size > 100 * 1024 * 1024:
-        raise HTTPException(status_code=400, detail="File too large. Maximum size is 100MB")
-    
-    # Create temporary file
-    temp_file = None
+async def transcribe_audio(
+    audio_file: UploadFile = File(...),
+    language: str = Form(None)
+):
     try:
-        # Create temporary file with proper extension
-        file_extension = os.path.splitext(audio_file.filename)[1] if audio_file.filename else ".wav"
-        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=file_extension)
+        # Validate file type
+        if not audio_file.content_type or not audio_file.content_type.startswith(('audio/', 'application/')):
+            return JSONResponse(
+                content={"error": "Invalid file type. Please upload .mp3 or .wav files", "status": "failed"}, 
+                status_code=400
+            )
         
-        # Write uploaded content to temporary file
-        content = await audio_file.read()
-        temp_file.write(content)
-        temp_file.close()
+        # Get file extension
+        filename = audio_file.filename or ""
+        file_extension = os.path.splitext(filename)[1].lower()
         
-        logger.info(f"Processing file: {audio_file.filename} ({len(content)} bytes)")
+        if file_extension not in ['.mp3', '.wav', '.m4a', '.flac', '.ogg']:
+            return JSONResponse(
+                content={"error": "Unsupported file format. Supported formats: .mp3, .wav, .m4a, .flac, .ogg", "status": "failed"}, 
+                status_code=400
+            )
         
-        # Call Ray Serve deployment
-        result = await whisperx_handle.remote(temp_file.name)
+        # Read audio file
+        audio_data = await audio_file.read()
         
-        # Check for errors in result
-        if isinstance(result, dict) and "error" in result:
-            raise HTTPException(status_code=500, detail=result["error"])
+        # Get Ray Serve handle
+        handle = serve.get_deployment("WhisperXService").get_handle()
         
-        return JSONResponse(content={
-            "filename": audio_file.filename,
-            "transcription": result
+        # Make request
+        result = await handle.remote({
+            "audio_data": audio_data,
+            "file_extension": file_extension,
+            "language": language
         })
         
+        return JSONResponse(content=result)
+        
     except Exception as e:
-        logger.error(f"Error processing audio file: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Error processing audio: {str(e)}")
-    
-    finally:
-        # Clean up temporary file
-        if temp_file and os.path.exists(temp_file.name):
-            try:
-                os.unlink(temp_file.name)
-            except Exception as e:
-                logger.warning(f"Failed to delete temporary file: {str(e)}")
+        return JSONResponse(
+            content={"error": str(e), "status": "failed"}, 
+            status_code=500
+        )
 
-@app.post("/transcribe-url")
-async def transcribe_from_url(audio_url: str):
-    """
-    Transcribe an audio file from a URL
+def main():
+    # Initialize Ray
+    ray.init()
     
-    Args:
-        audio_url: URL to audio file
-        
-    Returns:
-        JSON with transcribed text and word timestamps
-    """
-    import requests
+    # Deploy the WhisperX service 
+    serve.start(detached=True)
+    serve.run(WhisperXService.bind(), name="WhisperXService")
     
-    try:
-        # Download file from URL
-        response = requests.get(audio_url, timeout=30)
-        response.raise_for_status()
-        
-        # Create temporary file
-        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".wav")
-        temp_file.write(response.content)
-        temp_file.close()
-        
-        logger.info(f"Processing URL: {audio_url}")
-        
-        # Call Ray Serve deployment
-        result = await whisperx_handle.remote(temp_file.name)
-        
-        # Check for errors in result
-        if isinstance(result, dict) and "error" in result:
-            raise HTTPException(status_code=500, detail=result["error"])
-        
-        return JSONResponse(content={
-            "url": audio_url,
-            "transcription": result
-        })
-        
-    except requests.RequestException as e:
-        raise HTTPException(status_code=400, detail=f"Failed to download audio from URL: {str(e)}")
-    except Exception as e:
-        logger.error(f"Error processing audio from URL: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Error processing audio: {str(e)}")
+    logger.info("WhisperX Ray Serve deployment started")
     
-    finally:
-        # Clean up temporary file
-        if 'temp_file' in locals() and os.path.exists(temp_file.name):
-            try:
-                os.unlink(temp_file.name)
-            except Exception as e:
-                logger.warning(f"Failed to delete temporary file: {str(e)}")
-
-# Graceful shutdown handler
-@app.on_event("shutdown")
-async def shutdown_event():
-    logger.info("Shutting down WhisperX service...")
-    serve.shutdown()
-    ray.shutdown()
+    # Start FastAPI server
+    uvicorn.run(app, host="0.0.0.0", port=8000)
 
 if __name__ == "__main__":
-    logger.info("Starting WhisperX Transcription Service...")
-    logger.info("Ray Dashboard available at: http://0.0.0.0:8265")
-    logger.info("API Documentation available at: http://0.0.0.0:8000/docs")
-    
-    # Run FastAPI server
-    uvicorn.run(
-        app,
-        host="0.0.0.0",
-        port=8000,
-        log_level="info"
-    )
+    main()
