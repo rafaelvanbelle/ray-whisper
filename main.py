@@ -4,8 +4,6 @@ from ray import serve
 from fastapi import FastAPI, UploadFile, File
 import asyncio
 
-ray.init()
-serve.start(detached=False)
 
 # This is the Ray Serve deployment
 @serve.deployment(ray_actor_options={"num_gpus": 0.5}, num_replicas=1)
@@ -30,17 +28,6 @@ class WhisperXModel:
     def __call__(self, audio_path: str):
         return self.transcribe_and_align(audio_path)
 
-WhisperXModel.deploy()
+whisperx_app = WhisperXModel.bind()
+serve.run(whisperx_app)
 
-# FastAPI frontend
-app = FastAPI()
-
-@app.post("/transcribe")
-async def transcribe(file: UploadFile = File(...)):
-    file_path = f"/tmp/{file.filename}"
-    with open(file_path, "wb") as f:
-        f.write(await file.read())
-
-    handle = serve.get_deployment("WhisperXModel").get_handle()
-    result = await handle.remote(file_path)
-    return result
