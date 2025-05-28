@@ -9,7 +9,7 @@ import io
 import tempfile
 import os
 
-@serve.deployment(num_replicas=1, ray_actor_options={})
+@serve.deployment(num_replicas=1, ray_actor_options={"num_gpus": 1})
 class Transcriber:
     def __init__(self):
         # Load WhisperX model
