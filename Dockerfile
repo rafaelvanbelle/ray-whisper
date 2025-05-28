@@ -1,13 +1,16 @@
-FROM python:3.10-slim
+# Use an official Python runtime as a parent image
+FROM ghcr.io/astral-sh/uv:python3.11-bookworm-slim
 
+# Set the working directory
 WORKDIR /app
 
-COPY requirements.txt .
-RUN apt-get update && apt-get install -y ffmpeg git && \
-    pip install --upgrade pip && pip install -r requirements.txt
+COPY . /app
 
-COPY app /app/app
-COPY ui /app/ui
-COPY run.sh /app/run.sh
+RUN uv sync --frozen
+RUN uv pip install "ctranslate2==4.5.0" 
 
-CMD ["bash", "run.sh"]
+# Expose the port FastAPI runs on
+EXPOSE 8000
+
+# Command to run the FastAPI app
+CMD ["uv","run","serve", "run", "main:whisperx_app"]
