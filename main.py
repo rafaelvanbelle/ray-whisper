@@ -3,8 +3,7 @@ import ray
 from ray import serve
 from fastapi import FastAPI, UploadFile, File
 import asyncio
-from ray.serve.config import HTTPOptions
-from ray.serve.run_config import RunConfig
+
 
 ray.init(dashboard_host="0.0.0.0")
 serve.start(http_options={"host":"0.0.0.0", "port": 8000})
