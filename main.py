@@ -9,6 +9,10 @@ import io
 import tempfile
 import os
 
+ray.init()
+
+serve.start(detached=False, http_options={"host": "0.0.0.0", "port": 8000})
+
 @serve.deployment(num_replicas=1, ray_actor_options={"num_gpus": 1})
 class Transcriber:
     def __init__(self):
