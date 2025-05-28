@@ -7,6 +7,7 @@ from ray.serve.config import HTTPOptions
 from ray.serve.run_config import RunConfig
 
 ray.init(dashboard_host="0.0.0.0")
+serve.start(http_options={"host":"0.0.0.0", "port": 8000})
 
 # This is the Ray Serve deployment
 @serve.deployment(ray_actor_options={"num_gpus": 0.5}, num_replicas=1)
@@ -32,11 +33,4 @@ class WhisperXModel:
         return self.transcribe_and_align(audio_path)
 
 whisperx_app = WhisperXModel.bind()
-serve.run(
-    whisperx_app,
-    run_config=RunConfig(
-        name="whisperx-app",
-        http_options=HTTPOptions(host="0.0.0.0", port=8000)
-    )
-)
 
