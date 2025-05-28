@@ -12,8 +12,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 @serve.deployment(
-    ray_actor_options={"num_gpus": 1 if torch.cuda.is_available() else 0},
-    max_concurrent_queries=1  # Limit concurrent requests to avoid OOM
+    ray_actor_options={"num_gpus": 1 if torch.cuda.is_available() else 0}
 )
 class WhisperXService:
     def __init__(self):
