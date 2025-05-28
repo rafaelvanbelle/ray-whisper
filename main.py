@@ -4,6 +4,7 @@ from ray import serve
 from fastapi import FastAPI, UploadFile, File
 import asyncio
 
+ray.init(dashboard_host="0.0.0.0")
 
 # This is the Ray Serve deployment
 @serve.deployment(ray_actor_options={"num_gpus": 0.5}, num_replicas=1)
@@ -29,5 +30,11 @@ class WhisperXModel:
         return self.transcribe_and_align(audio_path)
 
 whisperx_app = WhisperXModel.bind()
-serve.run(whisperx_app)
+serve.run(
+    whisperx_app,
+    run_config=RunConfig(
+        name="whisperx-app",
+        http_options=HTTPOptions(host="0.0.0.0", port=8000)
+    )
+)
 
