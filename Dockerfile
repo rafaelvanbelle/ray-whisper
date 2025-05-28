@@ -11,6 +11,7 @@ RUN uv pip install "ctranslate2==4.5.0"
 
 # Expose the port FastAPI runs on
 EXPOSE 8000
+EXPOSE 8265
 
 # Command to run the FastAPI app
-CMD ["uv","run","serve", "run", "main:whisperx_app"]
+CMD ["uv","run","python", "main.py"]
