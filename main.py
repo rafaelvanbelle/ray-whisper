@@ -3,6 +3,7 @@ import tempfile
 from typing import Dict, Any
 import ray
 from ray import serve
+from starlette.requests import Request
 import whisperx
 import torch
 import logging
@@ -12,7 +13,8 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 @serve.deployment(
-    ray_actor_options={"num_gpus": 1 if torch.cuda.is_available() else 0}
+    ray_actor_options={"num_gpus": 1 if torch.cuda.is_available() else 0},
+    max_concurrent_queries=1  # Limit concurrent requests to avoid OOM
 )
 class WhisperXService:
     def __init__(self):
@@ -24,7 +26,7 @@ class WhisperXService:
         
         # Load the model
         self.model = whisperx.load_model(
-            "tiny", 
+            "large-v2", 
             self.device, 
             compute_type=self.compute_type
         )
@@ -49,22 +51,16 @@ class WhisperXService:
                 logger.warning(f"Could not load alignment model for {language_code}: {e}")
                 self.align_model = None
 
-    async def __call__(self, request) -> Dict[str, Any]:
+    def health_check(self):
+        """Health check endpoint"""
+        return {"status": "healthy", "device": self.device}
+
+    def transcribe_audio_data(self, audio_data: bytes, file_extension: str = ".wav", language: str = None) -> Dict[str, Any]:
+        """Transcribe audio from raw bytes"""
         try:
-            # Get audio file from request
-            audio_data = request.get("audio_data")
-            file_extension = request.get("file_extension", ".wav")
-            language = request.get("language", None)  # Optional language hint
-            
-            if not audio_data:
-                return {"error": "No audio data provided"}
-            
-            # Handle audio data (bytes from uploaded file)
-            audio_bytes = audio_data
-            
             # Save to temporary file with proper extension
             with tempfile.NamedTemporaryFile(delete=False, suffix=file_extension) as tmp_file:
-                tmp_file.write(audio_bytes)
+                tmp_file.write(audio_data)
                 temp_audio_path = tmp_file.name
             
             # Load audio
@@ -113,73 +109,74 @@ class WhisperXService:
                 "status": "failed"
             }
 
-# FastAPI app for health checks and simple interface
-from fastapi import FastAPI, UploadFile, File, Form
-from fastapi.responses import JSONResponse
-import uvicorn
-
-app = FastAPI(title="WhisperX Ray Serve API")
-
-@app.get("/health")
-async def health_check():
-    return {"status": "healthy"}
-
-@app.post("/transcribe")
-async def transcribe_audio(
-    audio_file: UploadFile = File(...),
-    language: str = Form(None)
-):
-    try:
-        # Validate file type
-        if not audio_file.content_type or not audio_file.content_type.startswith(('audio/', 'application/')):
-            return JSONResponse(
-                content={"error": "Invalid file type. Please upload .mp3 or .wav files", "status": "failed"}, 
-                status_code=400
-            )
-        
-        # Get file extension
-        filename = audio_file.filename or ""
-        file_extension = os.path.splitext(filename)[1].lower()
-        
-        if file_extension not in ['.mp3', '.wav', '.m4a', '.flac', '.ogg']:
-            return JSONResponse(
-                content={"error": "Unsupported file format. Supported formats: .mp3, .wav, .m4a, .flac, .ogg", "status": "failed"}, 
-                status_code=400
-            )
-        
-        # Read audio file
-        audio_data = await audio_file.read()
-        
-        # Get Ray Serve handle
-        handle = serve.get_deployment("WhisperXService").get_handle()
-        
-        # Make request
-        result = await handle.remote({
-            "audio_data": audio_data,
-            "file_extension": file_extension,
-            "language": language
-        })
-        
-        return JSONResponse(content=result)
-        
-    except Exception as e:
-        return JSONResponse(
-            content={"error": str(e), "status": "failed"}, 
-            status_code=500
-        )
+    async def __call__(self, request) -> Dict[str, Any]:
+        # Handle different request types based on HTTP method or content
+        if hasattr(request, 'method'):
+            # HTTP request from FastAPI integration
+            if request.method == "GET" and request.url.path.endswith("/health"):
+                return self.health_check()
+            elif request.method == "POST" and request.url.path.endswith("/transcribe"):
+                # Handle multipart form data
+                form = await request.form()
+                audio_file = form.get("audio_file")
+                language = form.get("language")
+                
+                if not audio_file:
+                    return {"error": "No audio file provided", "status": "failed"}
+                
+                # Validate file type
+                filename = getattr(audio_file, 'filename', '') or ''
+                file_extension = os.path.splitext(filename)[1].lower()
+                
+                if file_extension not in ['.mp3', '.wav', '.m4a', '.flac', '.ogg']:
+                    return {
+                        "error": "Unsupported file format. Supported formats: .mp3, .wav, .m4a, .flac, .ogg", 
+                        "status": "failed"
+                    }
+                
+                # Read audio data
+                audio_data = await audio_file.read()
+                
+                return self.transcribe_audio_data(audio_data, file_extension, language)
+        else:
+            # Direct Ray Serve call (legacy support)
+            audio_data = request.get("audio_data")
+            file_extension = request.get("file_extension", ".wav")
+            language = request.get("language", None)
+            
+            if not audio_data:
+                return {"error": "No audio data provided"}
+            
+            return self.transcribe_audio_data(audio_data, file_extension, language)
 
 def main():
     # Initialize Ray
     ray.init()
     
-    # Deploy the WhisperX service 
-    serve.start(detached=True)
-    serve.run(WhisperXService.bind(), name="WhisperXService")
+    # Start Ray Serve with HTTP options
+    serve.start(detached=True, http_options={"host": "0.0.0.0", "port": 8000})
     
-    logger.info("WhisperX Ray Serve deployment started")
+    # Deploy the WhisperX service with route prefix
+    serve.run(
+        WhisperXService.bind(), 
+        name="WhisperXService",
+        route_prefix="/"
+    )
     
-    # Start FastAPI server
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    logger.info("WhisperX Ray Serve deployment started on port 8000")
+    logger.info("Available endpoints:")
+    logger.info("- Health check: GET http://localhost:8000/health")
+    logger.info("- Transcribe: POST http://localhost:8000/transcribe")
+    
+    # Keep the main process running
+    import time
+    try:
+        while True:
+            time.sleep(1)
+    except KeyboardInterrupt:
+        logger.info("Shutting down...")
+        serve.shutdown()
+        ray.shutdown()
 
 if __name__ == "__main__":
     main()
