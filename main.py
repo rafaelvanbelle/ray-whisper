@@ -5,7 +5,7 @@ from fastapi import FastAPI, UploadFile, File
 import asyncio
 
 ray.init()
-serve.start(detached=True)
+serve.start(detached=False)
 
 # This is the Ray Serve deployment
 @serve.deployment(ray_actor_options={"num_gpus": 0.5}, num_replicas=1)
