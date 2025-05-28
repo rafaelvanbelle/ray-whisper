@@ -14,4 +14,4 @@ EXPOSE 8000
 EXPOSE 8265
 
 # Command to run the FastAPI app
-CMD ["uv","run","python", "main.py"]
+CMD ["python", "main.py"]
