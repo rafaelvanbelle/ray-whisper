@@ -16,12 +16,12 @@ EXPOSE 8000
 EXPOSE 8265
 
 # Make sure start.sh is executable
-#RUN chmod +x /app/start.sh
+RUN chmod +x /app/start.sh
 
 # Command to run the FastAPI app
 #ENV RAY_SERVE_HTTP_HOST=0.0.0.0
 #ENV RAY_SERVE_HTTP_PORT=8000
 
 # Set the entrypoint to run the start.sh script
-CMD ["uv", "run", "python", "main.py"]
+CMD ["/app/start.sh"]
 
