@@ -10,9 +10,6 @@ import tempfile
 import os
 import time
 
-ray.init()
-
-serve.start(detached=False, http_options={"host": "0.0.0.0", "port": 8001})
 
 @serve.deployment(num_replicas=1, ray_actor_options={"num_gpus": 1})
 class Transcriber:
@@ -50,6 +47,3 @@ class Transcriber:
         return {"text": result}
 
 transcriber_app = Transcriber.bind()
-
-while True:
-    time.sleep(1)  # Keep the server running
