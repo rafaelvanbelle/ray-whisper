@@ -3,7 +3,8 @@ from ray import serve
 import whisperx
 
 ray.init()
-serve.start(detached=True)
+serve.start(detached=True, http_options={"host": "0.0.0.0"})
+
 
 @serve.deployment(ray_actor_options={'num_gpus':0.5}, num_replicas=1, name='whisperx')
 class WhisperXModel:
@@ -31,4 +32,4 @@ class WhisperXModel:
             "word_timestamps": result_aligned["segments"][0]["words"]
         }
 
-whisperx_app = WhisperXModel.bind()
+serve.run(WhisperXModel.bind())
