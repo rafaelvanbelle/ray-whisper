@@ -10,6 +10,8 @@ import tempfile
 import os
 import time
 
+ray.init()
+
 
 @serve.deployment(num_replicas=1, ray_actor_options={"num_gpus": 1})
 class Transcriber:
@@ -47,3 +49,9 @@ class Transcriber:
         return {"text": result}
 
 transcriber_app = Transcriber.bind()
+serve.start(detached=True, host="0.0.0.0")
+
+# Block until this script is killed manually with ctrl-c
+import time
+while True:
+    time.sleep(10)
