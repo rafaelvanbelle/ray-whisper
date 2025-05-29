@@ -54,8 +54,8 @@ class Transcriber:
         print(f"Transcription time: {end - start:.2f} seconds")
 
         # 2. Align whisper output
-        model_a, metadata = whisperx.load_align_model(language_code=result["language"], device=device)
-        result = whisperx.align(result["segments"], model_a, metadata, audio, device, return_char_alignments=False)
+        model_a, metadata = whisperx.load_align_model(language_code=result["language"], device=self.device)
+        result = whisperx.align(result["segments"], model_a, metadata, audio_tensor, self.device, return_char_alignments=False)
 
         #if diarize:
         #    diarize_model = whisperx.diarize.DiarizationPipeline(use_auth_token=YOUR_HF_TOKEN, device=device)
