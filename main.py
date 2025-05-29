@@ -79,7 +79,7 @@ class Transcriber:
                 writer.write_result(result, srt_tmp, options={'max_line_width':None, 'max_line_count':None, 'highlight_words':None})
 
             # Read SRT file as bytes and encode as base64
-            with open(srt_tmp, "rb") as f:
+            with open(srt_tmp.name, "rb") as f:
                 srt_bytes = f.read()
                 srt_b64 = base64.b64encode(srt_bytes).decode("utf-8")
 
