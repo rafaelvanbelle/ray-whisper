@@ -43,7 +43,7 @@ def write_srt(result, audio, language, output_dir="/tmp", extension="srt"):
     writer = get_writer(extension, output_dir=output_dir)
     writer(result, audio, options={'max_line_width':None, 'max_line_count':None, 'highlight_words':None})
 
-    audio_basename = os.path.basename(audio_path)
+    audio_basename = os.path.basename(audio)
     audio_basename = os.path.splitext(audio_basename)[0]
     output_path = os.path.join(
             output_dir, audio_basename + "." + extension
