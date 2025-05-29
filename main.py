@@ -69,19 +69,22 @@ class Transcriber:
                 formatted_text += f"[{start_ts} --> {end_ts}] {seg['text'].strip()}\n"
 
             with tempfile.NamedTemporaryFile(suffix=".srt", delete=False) as srt_tmp:
-                writer = get_writer(output_format='srt', output_dir=os.path.dirname(srt_tmp.name))
-                writer(result, audio_path, os.path.basename(srt_tmp.name))
-                srt_path = srt_tmp.name
+                from whispers.utils import WriteSRT
+                writer = WriteSRT()
+                writer.write_result(result, srt_tmp)
+                #writer = get_writer(output_format='srt', output_dir=os.path.dirname(srt_tmp.name))
+                #writer(result, audio_path)
+                #srt_path = srt_tmp.name
 
             # Read SRT file as bytes and encode as base64
-            with open(srt_path, "rb") as f:
+            with open(srt_tmp, "rb") as f:
                 srt_bytes = f.read()
                 srt_b64 = base64.b64encode(srt_bytes).decode("utf-8")
 
             return JSONResponse({
                 "formatted_text": formatted_text,
                 "srt_b64": srt_b64,
-                "srt_filename": os.path.basename(srt_path)
+                "srt_filename": os.path.basename(srt_tmp.name)
             })
 
 transcriber_app = Transcriber.bind()
