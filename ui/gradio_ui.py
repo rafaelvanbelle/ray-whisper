@@ -5,6 +5,7 @@ import base64
 import time
 import os
 import whisperx
+from whisperx.utils import get_writer
 
 async def transcribe(audio):
     timeout = httpx.Timeout(connect=60.0, read=None, write=None, timeout=9999)  # Increase both read and connect timeouts
@@ -39,7 +40,7 @@ def format_segments(result):
 
 def write_srt(result, audio, language, output_dir="/tmp", extension="srt"):
 
-    writer = whisperx.utils.get_writer(extension, output_dir=output_dir)
+    writer = get_writer(extension, output_dir=output_dir)
     writer(result, audio, options={'max_line_width':None, 'max_line_count':None, 'highlight_words':None})
 
     audio_basename = os.path.basename(audio_path)
