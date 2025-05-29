@@ -9,7 +9,7 @@ import io
 import tempfile
 import os
 import time
-from whisperx.utils import get_writer
+from whisperx.utils import get_writer, WriteSRT
 from starlette.responses import FileResponse, JSONResponse
 import base64
 
@@ -69,7 +69,6 @@ class Transcriber:
                 formatted_text += f"[{start_ts} --> {end_ts}] {seg['text'].strip()}\n"
 
             with tempfile.NamedTemporaryFile(suffix=".srt", delete=False) as srt_tmp:
-                from whispers.utils import WriteSRT
                 writer = WriteSRT()
                 writer.write_result(result, srt_tmp)
                 #writer = get_writer(output_format='srt', output_dir=os.path.dirname(srt_tmp.name))
