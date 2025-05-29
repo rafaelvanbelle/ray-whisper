@@ -57,8 +57,11 @@ class Transcriber:
             end = time.time()
             print(f"Transcription time: {end - start:.2f} seconds")
 
+            language = result.get("language", "en")
+
+
             # 2. Align whisper output
-            model_a, metadata = whisperx.load_align_model(language_code=result["language"], device=self.device)
+            model_a, metadata = whisperx.load_align_model(language_code=language, device=self.device)
             result = whisperx.align(result["segments"], model_a, metadata, audio_tensor, self.device, return_char_alignments=False)
 
             # Format segments with timestamps
@@ -67,7 +70,10 @@ class Transcriber:
                 start_ts = time.strftime('%H:%M:%S', time.gmtime(seg['start']))
                 end_ts = time.strftime('%H:%M:%S', time.gmtime(seg['end']))
                 formatted_text += f"[{start_ts} --> {end_ts}] {seg['text'].strip()}\n"
-
+            
+            # Write SRT file 
+            # output writer needs language code
+            result['language'] = language
             with tempfile.NamedTemporaryFile(suffix=".srt", delete=False) as srt_tmp:
                 writer = WriteSRT(os.path.basename(srt_tmp.name))
                 writer.write_result(result, srt_tmp, options={'max_line_width':None, 'max_line_count':None, 'highlight_words':None})
