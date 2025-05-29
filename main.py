@@ -9,6 +9,7 @@ import io
 import tempfile
 import os
 import time
+from whisperx.utils import get_writer
 
 print("CUDA available:", torch.cuda.is_available())
 print("CUDA device:", torch.cuda.get_device_name(0) if torch.cuda.is_available() else "No CUDA")
@@ -59,8 +60,18 @@ class Transcriber:
 
         #if diarize:
         #    diarize_model = whisperx.diarize.DiarizationPipeline(use_auth_token=YOUR_HF_TOKEN, device=device)
+        writer = get_writer(output_format='srt', output_dir='')
+        #return {"text": result}
 
-        return {"text": result}
+        segments_result = []
+        for segment in result:
+            segments_result.append(Segment(
+                start=segment["start"],
+                end=segment["end"],
+                text=segment["text"]
+            ))
+
+        return segments_result
 
 transcriber_app = Transcriber.bind()
 
