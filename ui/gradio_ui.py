@@ -10,14 +10,16 @@ from whisperx.utils import get_writer
 async def transcribe(audio):
     timeout = httpx.Timeout(connect=60.0, read=None, write=None, timeout=9999)  # Increase both read and connect timeouts
     async with httpx.AsyncClient(timeout=timeout) as client:
+        print(f"Starting transcription for {audio} at {time.time()}")
         with open(audio, "rb") as f:
             files = {"file": (audio, f, "audio/wav")}
             response = await client.post("http://localhost:8000", files=files)
-            
+            print(f"Response status code: {response.status_code}")
             result = response.json()
             formatted_text = format_segments(result)
             srt_path = write_srt(result, audio, language=result['language'], output_dir="/tmp", extension="srt")
             
+            print(f"finsihed at {time.time()}")
             
             return formatted_text, srt_path
 
