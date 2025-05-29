@@ -49,7 +49,6 @@ class Transcriber:
             tmp.flush()
             audio_path = tmp.name
 
-        try:
             audio_tensor = whisperx.load_audio(tmp.name)
             start = time.time()
             print(f"Starting transcription for '{audio_file.filename}'...")
@@ -84,8 +83,6 @@ class Transcriber:
                 "srt_b64": srt_b64,
                 "srt_filename": os.path.basename(srt_path)
             })
-        finally:
-            os.remove(audio_path)
 
 transcriber_app = Transcriber.bind()
 
