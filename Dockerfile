@@ -9,7 +9,7 @@ COPY . /app
 RUN apt-get update && apt-get install -y ffmpeg && rm -rf /var/lib/apt/lists/*
 
 RUN uv sync --frozen
-RUN uv pip install "ctranslate2==4.5.0" 
+#RUN uv pip install "ctranslate2==4.5.0" 
 
 # Expose the port FastAPI runs on
 EXPOSE 8000

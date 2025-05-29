@@ -13,3 +13,9 @@ dependencies = [
     "uvicorn>=0.34.2",
     "whisperx>=3.3.4",
 ]
+
+
+[tool.uv]
+# Always install CTranslate2 4.5.0, regardless of whether transitive dependencies request
+# a different version.
+override-dependencies = ["ctranslate2==4.5.0"]
