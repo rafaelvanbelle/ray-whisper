@@ -69,7 +69,7 @@ class Transcriber:
                 formatted_text += f"[{start_ts} --> {end_ts}] {seg['text'].strip()}\n"
 
             with tempfile.NamedTemporaryFile(suffix=".srt", delete=False) as srt_tmp:
-                writer = WriteSRT()
+                writer = WriteSRT(os.path.basename(srt_tmp.name))
                 writer.write_result(result, srt_tmp)
                 #writer = get_writer(output_format='srt', output_dir=os.path.dirname(srt_tmp.name))
                 #writer(result, audio_path)
