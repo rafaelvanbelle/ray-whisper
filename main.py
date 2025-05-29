@@ -10,6 +10,10 @@ import tempfile
 import os
 import time
 
+print("CUDA available:", torch.cuda.is_available())
+print("CUDA device:", torch.cuda.get_device_name(0) if torch.cuda.is_available() else "No CUDA")
+
+
 @serve.deployment(num_replicas=1, ray_actor_options={"num_gpus": 1})
 class Transcriber:
     def __init__(self):
