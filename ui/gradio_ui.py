@@ -37,14 +37,9 @@ def format_segments(result):
 
 
 def write_srt(result, audio, language, output_dir="/tmp", extension="srt"):
-    # Write SRT file 
-    #with tempfile.NamedTemporaryFile(suffix=".srt", mode="w", delete=False) as srt_tmp:
-    writer = whisperx.utils.get_writer(extension, output_dir=output_dir)
-    writer(result, audio, language=result['language'])
 
-    with 
-        writer = WriteSRT(os.path.basename(audio))
-        writer.write_result(result, srt_tmp, options={'max_line_width':None, 'max_line_count':None, 'highlight_words':None})
+    writer = whisperx.utils.get_writer(extension, output_dir=output_dir)
+    writer(result, audio, options={'max_line_width':None, 'max_line_count':None, 'highlight_words':None})
 
     audio_basename = os.path.basename(audio_path)
     audio_basename = os.path.splitext(audio_basename)[0]
