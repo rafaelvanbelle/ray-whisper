@@ -23,7 +23,7 @@ class Transcriber:
 
     def transcribe(self, audio_tensor) -> str:
         # Transcribe loaded audio
-        result = self.model.transcribe(audio_tensor, batch_size=4)
+        result = self.model.transcribe(audio_tensor, batch_size=16)
         return result["segments"] # before alignment
 
     async def __call__(self, http_request: Request) -> str:
