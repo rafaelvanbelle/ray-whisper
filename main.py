@@ -24,7 +24,7 @@ class Transcriber:
     def transcribe(self, audio_tensor) -> str:
         # Transcribe loaded audio
         result = self.model.transcribe(audio_tensor, batch_size=16)
-        return result["segments"] # before alignment
+        return result # before alignment
 
     async def __call__(self, http_request: Request) -> str:
         form = await http_request.form()
