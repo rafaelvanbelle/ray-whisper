@@ -64,30 +64,10 @@ class Transcriber:
             model_a, metadata = whisperx.load_align_model(language_code=language, device=self.device)
             result = whisperx.align(result["segments"], model_a, metadata, audio_tensor, self.device, return_char_alignments=False)
 
-            # Format segments with timestamps
-            formatted_text = ""
-            for seg in result["segments"]:
-                start_ts = time.strftime('%H:%M:%S', time.gmtime(seg['start']))
-                end_ts = time.strftime('%H:%M:%S', time.gmtime(seg['end']))
-                formatted_text += f"[{start_ts} --> {end_ts}] {seg['text'].strip()}\n"
-            
-            # Write SRT file 
-            # output writer needs language code
             result['language'] = language
-            with tempfile.NamedTemporaryFile(suffix=".srt", mode="w", delete=False) as srt_tmp:
-                writer = WriteSRT(os.path.basename(srt_tmp.name))
-                writer.write_result(result, srt_tmp, options={'max_line_width':None, 'max_line_count':None, 'highlight_words':None})
 
-            # Read SRT file as bytes and encode as base64
-            with open(srt_tmp.name, "rb") as f:
-                srt_bytes = f.read()
-                srt_b64 = base64.b64encode(srt_bytes).decode("utf-8")
+            return result
 
-            return JSONResponse({
-                "formatted_text": formatted_text,
-                "srt_b64": srt_b64,
-                "srt_filename": os.path.basename(srt_tmp.name)
-            })
-
+            
 transcriber_app = Transcriber.bind()
 
