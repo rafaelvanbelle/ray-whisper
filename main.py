@@ -61,9 +61,10 @@ class Transcriber:
 
 
             # 2. Align whisper output
+            print(f"Aligning transcription for '{audio_file.filename}'...")
             model_a, metadata = whisperx.load_align_model(language_code=language, device=self.device)
             result = whisperx.align(result["segments"], model_a, metadata, audio_tensor, self.device, return_char_alignments=False)
-
+            print(f"Alignment completed for '{audio_file.filename}'.")
             result['language'] = language
 
             return result
