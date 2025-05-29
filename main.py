@@ -70,7 +70,7 @@ class Transcriber:
 
             with tempfile.NamedTemporaryFile(suffix=".srt", delete=False) as srt_tmp:
                 writer = WriteSRT(os.path.basename(srt_tmp.name))
-                writer.write_result(result, srt_tmp, options={})
+                writer.write_result(result, srt_tmp, options={'max_line_width':None, 'max_line_count':None, 'highlight_words':None})
                 #writer = get_writer(output_format='srt', output_dir=os.path.dirname(srt_tmp.name))
                 #writer(result, audio_path)
                 #srt_path = srt_tmp.name
