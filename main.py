@@ -11,6 +11,7 @@ import os
 import time
 from whisperx.utils import get_writer
 from starlette.responses import FileResponse, JSONResponse
+import base64
 
 print("CUDA available:", torch.cuda.is_available())
 print("CUDA device:", torch.cuda.get_device_name(0) if torch.cuda.is_available() else "No CUDA")
@@ -68,24 +69,23 @@ class Transcriber:
                 end_ts = time.strftime('%H:%M:%S', time.gmtime(seg['end']))
                 formatted_text += f"[{start_ts} --> {end_ts}] {seg['text'].strip()}\n"
 
-            # Write SRT file
             with tempfile.NamedTemporaryFile(suffix=".srt", delete=False) as srt_tmp:
                 writer = get_writer(output_format='srt', output_dir=os.path.dirname(srt_tmp.name))
                 writer(result, audio_path, os.path.basename(srt_tmp.name))
                 srt_path = srt_tmp.name
 
-            # Optionally, print or log the formatted text
-            print(formatted_text)
+            # Read SRT file as bytes and encode as base64
+            with open(srt_path, "rb") as f:
+                srt_bytes = f.read()
+                srt_b64 = base64.b64encode(srt_bytes).decode("utf-8")
 
-            # Return the SRT file directly
-            return FileResponse(
-                srt_path,
-                media_type="application/x-subrip",
-                filename=os.path.basename(srt_path)
-            )
+            return JSONResponse({
+                "formatted_text": formatted_text,
+                "srt_b64": srt_b64,
+                "srt_filename": os.path.basename(srt_path)
+            })
         finally:
             os.remove(audio_path)
-
 
 transcriber_app = Transcriber.bind()
 
