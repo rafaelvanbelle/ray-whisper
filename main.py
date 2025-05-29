@@ -10,6 +10,7 @@ import tempfile
 import os
 import time
 from whisperx.utils import get_writer
+from starlette.responses import FileResponse, JSONResponse
 
 print("CUDA available:", torch.cuda.is_available())
 print("CUDA device:", torch.cuda.get_device_name(0) if torch.cuda.is_available() else "No CUDA")
@@ -45,33 +46,46 @@ class Transcriber:
         with tempfile.NamedTemporaryFile(suffix=ext) as tmp:
             tmp.write(audio_bytes)
             tmp.flush()
+            audio_path = tmp.name
 
+        try:
             audio_tensor = whisperx.load_audio(tmp.name)
-        start = time.time()
-        print(f"Starting transcription for '{audio_file.filename}'...")
-        result = self.transcribe(audio_tensor)
-        print(f"Transcription completed for '{audio_file.filename}'.")
-        end = time.time()
-        print(f"Transcription time: {end - start:.2f} seconds")
+            start = time.time()
+            print(f"Starting transcription for '{audio_file.filename}'...")
+            result = self.transcribe(audio_tensor)
+            print(f"Transcription completed for '{audio_file.filename}'.")
+            end = time.time()
+            print(f"Transcription time: {end - start:.2f} seconds")
 
-        # 2. Align whisper output
-        model_a, metadata = whisperx.load_align_model(language_code=result["language"], device=self.device)
-        result = whisperx.align(result["segments"], model_a, metadata, audio_tensor, self.device, return_char_alignments=False)
+            # 2. Align whisper output
+            model_a, metadata = whisperx.load_align_model(language_code=result["language"], device=self.device)
+            result = whisperx.align(result["segments"], model_a, metadata, audio_tensor, self.device, return_char_alignments=False)
 
-        #if diarize:
-        #    diarize_model = whisperx.diarize.DiarizationPipeline(use_auth_token=YOUR_HF_TOKEN, device=device)
-        writer = get_writer(output_format='srt', output_dir='')
-        #return {"text": result}
+            # Format segments with timestamps
+            formatted_text = ""
+            for seg in result["segments"]:
+                start_ts = time.strftime('%H:%M:%S', time.gmtime(seg['start']))
+                end_ts = time.strftime('%H:%M:%S', time.gmtime(seg['end']))
+                formatted_text += f"[{start_ts} --> {end_ts}] {seg['text'].strip()}\n"
 
-        segments_result = []
-        for segment in result:
-            segments_result.append(Segment(
-                start=segment["start"],
-                end=segment["end"],
-                text=segment["text"]
-            ))
+            # Write SRT file
+            with tempfile.NamedTemporaryFile(suffix=".srt", delete=False) as srt_tmp:
+                writer = get_writer(output_format='srt', output_dir=os.path.dirname(srt_tmp.name))
+                writer(result, audio_path, os.path.basename(srt_tmp.name))
+                srt_path = srt_tmp.name
 
-        return segments_result
+            # Optionally, print or log the formatted text
+            print(formatted_text)
+
+            # Return the SRT file directly
+            return FileResponse(
+                srt_path,
+                media_type="application/x-subrip",
+                filename=os.path.basename(srt_path)
+            )
+        finally:
+            os.remove(audio_path)
+
 
 transcriber_app = Transcriber.bind()
 
