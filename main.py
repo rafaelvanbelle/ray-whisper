@@ -14,12 +14,12 @@ print("CUDA available:", torch.cuda.is_available())
 print("CUDA device:", torch.cuda.get_device_name(0) if torch.cuda.is_available() else "No CUDA")
 
 
-@serve.deployment(num_replicas=1, ray_actor_options={"num_gpus": 1})
+@serve.deployment(num_replicas=2, ray_actor_options={"num_gpus": 0.5})
 class Transcriber:
     def __init__(self):
         # Load WhisperX model
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
-        self.model = whisperx.load_model("tiny", self.device, compute_type="float16" if self.device == "cuda" else "int8")
+        self.model = whisperx.load_model("large-v2", self.device, compute_type="float16" if self.device == "cuda" else "int8")
 
     def transcribe(self, audio_tensor) -> str:
         # Transcribe loaded audio
