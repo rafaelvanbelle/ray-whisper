@@ -74,12 +74,9 @@ class Transcriber:
             # Write SRT file 
             # output writer needs language code
             result['language'] = language
-            with tempfile.NamedTemporaryFile(suffix=".srt", delete=False) as srt_tmp:
+            with tempfile.NamedTemporaryFile(suffix=".srt", mode="w", delete=False) as srt_tmp:
                 writer = WriteSRT(os.path.basename(srt_tmp.name))
                 writer.write_result(result, srt_tmp, options={'max_line_width':None, 'max_line_count':None, 'highlight_words':None})
-                #writer = get_writer(output_format='srt', output_dir=os.path.dirname(srt_tmp.name))
-                #writer(result, audio_path)
-                #srt_path = srt_tmp.name
 
             # Read SRT file as bytes and encode as base64
             with open(srt_tmp, "rb") as f:
