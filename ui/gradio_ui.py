@@ -15,7 +15,7 @@ async def transcribe(audio):
             
             result = response.json()
             formatted_text = format_segments(result)
-            srt_path = write_srt(result, audio, language=response['language'], output_dir="/tmp", extension="srt")
+            srt_path = write_srt(result, audio, language=result['language'], output_dir="/tmp", extension="srt")
             
             
             return formatted_text, srt_path
