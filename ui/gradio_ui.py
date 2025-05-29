@@ -13,8 +13,9 @@ async def transcribe(audio):
             files = {"file": (audio, f, "audio/wav")}
             response = await client.post("http://localhost:8000", files=files)
             
-            formatted_text = format_segments(response)
-            srt_path = write_srt(response, audio, language=response['language'], output_dir="/tmp", extension="srt")
+            result = response.json()
+            formatted_text = format_segments(result)
+            srt_path = write_srt(result, audio, language=response['language'], output_dir="/tmp", extension="srt")
             
             
             return formatted_text, srt_path
