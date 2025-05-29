@@ -33,7 +33,9 @@ class Transcriber:
             return {"error": "No file part in the form"}
 
         audio_file = form["file"]
+        print(f"File '{audio_file.filename}' uploaded.")
         audio_bytes = await audio_file.read()
+        print(f"Read {len(audio_bytes)} bytes from the uploaded file.")
 
         # Extract file extension, default to .wav if none found
         ext = os.path.splitext(audio_file.filename)[1].lower() or ".wav"
@@ -44,9 +46,12 @@ class Transcriber:
             tmp.flush()
 
             audio_tensor = whisperx.load_audio(tmp.name)
-
+        start = time.time()
+        print(f"Starting transcription for '{audio_file.filename}'...")
         result = self.transcribe(audio_tensor)
-
+        print(f"Transcription completed for '{audio_file.filename}'.")
+        end = time.time()
+        print(f"Transcription time: {end - start:.2f} seconds")
         return {"text": result}
 
 transcriber_app = Transcriber.bind()
